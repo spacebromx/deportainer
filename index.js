@@ -2,27 +2,36 @@ const chalk = require('chalk')
 const figlet = require('figlet')
 const axios = require('axios')
 const fs = require('fs')
-const argv = require('minimist')(process.argv.slice(2));
+const {program} = require('commander')
+program.version('0.0.1')
 
+program
+  .requiredOption('--portainer-url <url>', 'Portainer instance URL')
+  .requiredOption('--portainer-username <username>', 'Portainer username')
+  .requiredOption('--portainer-password <password>', 'Portainer password')
+  .requiredOption('--portainer-stack <stack_name>', 'Portainer stack name')
+  .requiredOption('--stackfile <stack_file>', 'Portainer stack file')
+  .option('-e, <env_vars...>', 'Environment variables')
+  .parse(process.argv)
+
+const options = program.opts()
+
+console.log(options)
 
 let token = ''
-let portainer_stack = ''
 let stackId = null
 let fileData = null
 let envobj = []
 
-axios.defaults.headers.common = {Authorization: `Bearer ${token}`}
-
-clear()
 console.log(
   chalk.yellow(figlet.textSync('deportainer', {horizontalLayout: 'full'})),
 )
 
 function deploy() {
-  if (argv?.['e']?.length > 0) {
+  if (options['e'].length > 0) {
     console.log(chalk.bgMagenta('Environment variable(s) found'))
-    argv['e'].map(param => {
-      const [name, value] = param.split('=');
+    options['e'].map((param) => {
+      const [name, value] = param.split('=')
       envobj.push({name, value})
       console.log({name, value})
     })
@@ -32,17 +41,18 @@ function deploy() {
 
   console.log(chalk.blue('Getting auth token...'))
   const req = axios
-    .post('https://portainer.ops.sugiereme.xyz/api/auth', {
-      Username: 'admin',
-      Password: 'Terra_ll_1',
+    .post(`${options['portainerUrl']}/auth`, {
+      Username: options['portainerUsername'],
+      Password: options['portainerPassword'],
     })
     .then(
       ({data}) => {
         token = data.jwt
+        axios.defaults.headers.common = {Authorization: `Bearer ${token}`}
         console.log(chalk.green('The token was saved'))
         try {
           console.log(chalk.magenta('Reading stack file...'))
-          fileData = fs.readFileSync('./stack.yml', 'utf8')
+          fileData = fs.readFileSync(options['stackfile'], 'utf8')
           console.log(chalk.magenta('File read successfully'))
         } catch (err) {
           console.error(err)
@@ -51,12 +61,12 @@ function deploy() {
 
         console.log(chalk.blue('Getting target stack ID...'))
         const req = axios(
-          'https://portainer.ops.sugiereme.xyz/api/stacks',
+          `${options['portainerUrl']}/stacks`,
         ).then(
           ({data}) => {
             console.log(chalk.green('IDs fetched'))
             data.map((stack) => {
-              if (stack['Name'] === portainer_stack) {
+              if (stack['Name'] === options['portainerStack']) {
                 stackId = stack['Id']
                 endpointId = stack['EndpointId']
 
@@ -64,7 +74,7 @@ function deploy() {
                 console.log(chalk.magenta('Requesting stack update...'))
                 axios
                   .put(
-                    `https://portainer.ops.sugiereme.xyz/api/stacks/${stackId}?endpointId=${endpointId}`,
+                    `${options['portainerUrl']}/stacks/${stackId}?endpointId=${endpointId}`,
                     {
                       StackFileContent: fileData,
                       Env: envobj,
@@ -90,7 +100,7 @@ function deploy() {
             if (!stackId) {
               console.log(
                 chalk.red(
-                  `Can't find the stack "${portainer_stack}" in Portainer`,
+                  `Can't find the stack "${options['portainerStack']}" in Portainer`,
                 ),
               )
               process.exit(1)
