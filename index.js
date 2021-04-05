@@ -16,7 +16,6 @@ program
 
 const options = program.opts()
 
-console.log(options)
 
 let token = ''
 let stackId = null
